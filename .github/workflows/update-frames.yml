@@ -33,15 +33,14 @@ jobs:
         run: |
           python geojson_import.py out/frames_parsed_latest.geojson
 
-      - name: Upload frames.db to hosting via SCP
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.SFTP_HOST }}
-          username: ${{ secrets.SFTP_USER }}
-          password: ${{ secrets.SFTP_PASSWORD }}
-          port: ${{ secrets.SFTP_PORT }}
-          source: "api/backend/frames.db"
-          target: "/www/trans-time.ru/api/backend/"
-          overwrite: true
-          strip_components: 2
+      - name: Upload frames.db via SFTP (Reg.ru compatible)
+        working-directory: ./api/backend
+        env:
+          SFTP_HOST: ${{ secrets.SFTP_HOST }}
+          SFTP_USER: ${{ secrets.SFTP_USER }}
+          SFTP_PASSWORD: ${{ secrets.SFTP_PASSWORD }}
+          SFTP_PORT: ${{ secrets.SFTP_PORT }}
+        run: |
+          python -m pip install paramiko
+          python upload_sftp.py
 
