@@ -1,1 +1,0 @@
-    return {"type":"FeatureCollection","features":features})  from fastapi import FastAPI, Depends
