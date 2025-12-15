@@ -41,6 +41,7 @@ jobs:
           password: ${{ secrets.SFTP_PASSWORD }}
           port: ${{ secrets.SFTP_PORT }}
           source: "api/backend/frames.db"
-          target: "/www/trans-time.ru/"
-          strip_components: 2
+          target: "/www/trans-time.ru/api/backend/"
           overwrite: true
+          strip_components: 2
+
