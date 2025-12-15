@@ -1,4 +1,3 @@
-# api/backend/upload_api_sftp.py
 import os
 import posixpath
 import paramiko
@@ -8,7 +7,9 @@ USER = os.environ["SFTP_USER"]
 PASSWORD = os.environ["SFTP_PASSWORD"]
 PORT = int(os.environ.get("SFTP_PORT", "22"))
 
-REMOTE_DIR = "/www/trans-time.ru/api/backend"
+# ВАЖНО: для Reg.ru часто нельзя писать в /www/... по SFTP.
+# Грузим в относительный путь. Если не сработает — поменяешь на "api/backend".
+REMOTE_DIR = os.environ.get("SFTP_REMOTE_DIR", "trans-time.ru/api/backend")
 
 FILES = [
     "app_flask.py",
@@ -18,38 +19,38 @@ FILES = [
     "geojson_import.py",
     "parser_nerudas.py",
     "upload_sftp.py",
-    "requirements.txt",
-    "__init__.py",
 ]
 
-def ensure_dir(sftp, path):
-    parts = [p for p in path.split("/") if p]
-    cur = ""
-    for p in parts:
-        cur = cur + "/" + p
-        try:
-            sftp.stat(cur)
-        except FileNotFoundError:
-            sftp.mkdir(cur)
-
 def main():
-    transport = paramiko.Transport((HOST, PORT))
-    transport.connect(username=USER, password=PASSWORD)
-    sftp = paramiko.SFTPClient.from_transport(transport)
+    ssh = paramiko.SSHClient()
+    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    ssh.connect(HOST, port=PORT, username=USER, password=PASSWORD)
 
-    ensure_dir(sftp, REMOTE_DIR)
+    sftp = ssh.open_sftp()
 
-    for f in FILES:
-        if not os.path.exists(f):
-            print(f"[skip] {f} (not found)")
+    # НЕ создаём папки. Просто проверяем, что папка существует.
+    try:
+        sftp.stat(REMOTE_DIR)
+    except Exception as e:
+        raise SystemExit(
+            f"[upload_api_sftp] Remote dir not accessible: {REMOTE_DIR}\n"
+            f"Try setting SFTP_REMOTE_DIR to 'api/backend' or 'trans-time.ru/api/backend'.\n"
+            f"Original error: {e}"
+        )
+
+    for fn in FILES:
+        local_path = fn
+        if not os.path.exists(local_path):
+            print(f"[upload_api_sftp] skip missing: {local_path}")
             continue
-        remote_path = posixpath.join(REMOTE_DIR, f)
-        print(f"[upload] {f} -> {remote_path}")
-        sftp.put(f, remote_path)
+
+        remote_path = posixpath.join(REMOTE_DIR, fn)
+        print(f"[upload_api_sftp] put {local_path} -> {remote_path}")
+        sftp.put(local_path, remote_path)
 
     sftp.close()
-    transport.close()
-    print("[ok] api files uploaded")
+    ssh.close()
+    print("[upload_api_sftp] done")
 
 if __name__ == "__main__":
     main()
