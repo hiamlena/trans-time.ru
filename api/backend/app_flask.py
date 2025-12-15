@@ -1,249 +1,192 @@
 # api/backend/app_flask.py
 import json
-from datetime import datetime, timezone
-from typing import Dict, Optional, List, Any
+from datetime import datetime
+from typing import Dict, Optional, List
 
 from flask import Flask, jsonify, request, abort
 
 from db import SessionLocal
-from models import FrameRaw, FrameManual, FrameSuggestion
+
+# --- модели: FrameManual может отсутствовать в models.py на текущем шаге ---
+try:
+    from models import FrameRaw, FrameManual, FrameSuggestion  # type: ignore
+except Exception:
+    from models import FrameRaw, FrameSuggestion  # type: ignore
+    FrameManual = None  # временно: manual-слой подключим на следующем шаге
 
 app = Flask(__name__)
 
 
 @app.route("/health")
 def health():
-    # будет доступно как /api/health если приложение смонтировано под /api
-    return jsonify({"status": "ok", "ts": datetime.now(timezone.utc).isoformat()})
+    return jsonify({"status": "ok"})
 
 
-# ---------- helpers ----------
-
-def utc_now() -> datetime:
-    return datetime.now(timezone.utc)
-
-
-def iso(dt: Optional[datetime]) -> Optional[str]:
-    return dt.isoformat() if dt else None
-
+# ---------- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ----------
 
 def _parse_json_field(text: Optional[str], default):
-    if text is None:
-        return default
-    if isinstance(text, (list, dict)):
-        return text
-    s = str(text).strip()
-    if not s:
+    if not text:
         return default
     try:
-        return json.loads(s)
+        return json.loads(text)
     except Exception:
         return default
 
 
-def _pick(override, base):
-    return override if override is not None else base
+def _getattr(obj, name: str, default=None):
+    return getattr(obj, name, default)
 
 
-def _merge_raw_and_manual(raw: FrameRaw, manual: Optional[FrameManual]) -> dict:
-    """Склеиваем raw + manual в 1 Feature."""
+def _merge_raw_and_manual(raw, manual):
+    """Склеиваем данные raw + manual в один Feature.
+       Если manual нет — просто отдаём raw.
+    """
+
+    def pick(override, base):
+        return override if override is not None else base
 
     # координаты
-    lon = _pick(manual.lon_override if manual else None, raw.lon)
-    lat = _pick(manual.lat_override if manual else None, raw.lat)
+    lon = pick(_getattr(manual, "lon_override", None), _getattr(raw, "lon", None))
+    lat = pick(_getattr(manual, "lat_override", None), _getattr(raw, "lat", None))
 
     # time_windows и tags
     time_windows = _parse_json_field(
-        (manual.time_windows_override if manual and manual.time_windows_override is not None else raw.time_windows),
+        _getattr(manual, "time_windows_override", None) if manual and _getattr(manual, "time_windows_override", None) is not None
+        else _getattr(raw, "time_windows", None),
         default=[]
     )
 
-    tags_raw = _parse_json_field(raw.tags, default=[])
-    tags_admin = _parse_json_field(manual.tags_admin, default=[]) if manual else []
-    tags = list(dict.fromkeys((tags_raw or []) + (tags_admin or [])))  # uniq preserving order
-
-    # комментарии
-    comment_raw = (raw.comment_raw or "").strip()
-    comment_admin = (manual.comment_admin.strip() if manual and manual.comment_admin else "")
-
-    if comment_admin:
-        base_human = (raw.comment_human or "").strip()
-        human = f"{base_human} Комментарий администратора: {comment_admin}".strip() if base_human else f"Комментарий администратора: {comment_admin}"
-    else:
-        human = (raw.comment_human or "").strip() or None
+    tags_raw = _parse_json_field(_getattr(raw, "tags", None), default=[])
+    tags_admin = _parse_json_field(_getattr(manual, "tags_admin", None), default=[]) if manual else []
+    tags = list(dict.fromkeys(tags_raw + tags_admin))
 
     properties = {
-        "road_id": _pick(manual.road_id_override if manual else None, raw.road_id),
-        "road_name": _pick(manual.road_name_override if manual else None, raw.road_name),
-        "class": _pick(manual.clazz_override if manual else None, raw.clazz),
-        "object_type": raw.object_type,
-        "hgv_access": _pick(manual.hgv_access_override if manual else None, raw.hgv_access),
-        "weight_limit_tons": _pick(manual.weight_limit_tons_override if manual else None, raw.weight_limit_tons),
-        "axle_load_tons": _pick(manual.axle_load_tons_override if manual else None, raw.axle_load_tons),
+        "road_id": pick(_getattr(manual, "road_id_override", None), _getattr(raw, "road_id", None)),
+        "road_name": pick(_getattr(manual, "road_name_override", None), _getattr(raw, "road_name", None)),
+        "class": pick(_getattr(manual, "clazz_override", None), _getattr(raw, "clazz", None)),
+        "object_type": _getattr(raw, "object_type", "frame"),
+        "hgv_access": pick(_getattr(manual, "hgv_access_override", None), _getattr(raw, "hgv_access", None)),
+        "weight_limit_tons": pick(_getattr(manual, "weight_limit_tons_override", None), _getattr(raw, "weight_limit_tons", None)),
+        "axle_load_tons": pick(_getattr(manual, "axle_load_tons_override", None), _getattr(raw, "axle_load_tons", None)),
         "time_windows": time_windows,
-        "valid_from": _pick(manual.valid_from_override if manual else None, raw.valid_from),
-        "valid_to": _pick(manual.valid_to_override if manual else None, raw.valid_to),
-        "direction": _pick(manual.direction_override if manual else None, raw.direction),
-        "source_type": raw.source_type,
-        "source_name": raw.source_name,
-        "priority": raw.priority,
+        "valid_from": pick(_getattr(manual, "valid_from_override", None), _getattr(raw, "valid_from", None)),
+        "valid_to": pick(_getattr(manual, "valid_to_override", None), _getattr(raw, "valid_to", None)),
+        "direction": pick(_getattr(manual, "direction_override", None), _getattr(raw, "direction", None)),
+        "source_type": _getattr(raw, "source_type", None),
+        "source_name": _getattr(raw, "source_name", None),
+        "priority": _getattr(raw, "priority", None),
         "tags": tags,
-        "frame_id": raw.frame_id,
-        "frame_row_id_raw": raw.frame_row_id_raw,
-        "frame_url": raw.frame_url,
-        "frame_status_raw": raw.frame_status_raw,
-        "frame_error_raw": raw.frame_error_raw,
-        "frame_state": _pick(manual.frame_state_override if manual else None, raw.frame_state),
 
-        # ВАЖНО: datetime -> строка, иначе Flask может упасть
-        "frame_first_seen": iso(raw.frame_first_seen),
-        "frame_last_seen": iso(raw.frame_last_seen),
+        "frame_id": _getattr(raw, "frame_id", None),
+        "frame_row_id_raw": _getattr(raw, "frame_row_id_raw", None),
+        "frame_url": _getattr(raw, "frame_url", None),
+        "frame_status_raw": _getattr(raw, "frame_status_raw", None),
+        "frame_error_raw": _getattr(raw, "frame_error_raw", None),
 
-        "frame_is_active": bool(raw.frame_is_active),
-        "frame_change_type": raw.frame_change_type,
-
-        "comment_raw": comment_raw or None,
-        "comment_human": human,
+        "frame_state": pick(_getattr(manual, "frame_state_override", None), _getattr(raw, "frame_state", None)),
+        "frame_first_seen": _getattr(raw, "frame_first_seen", None),
+        "frame_last_seen": _getattr(raw, "frame_last_seen", None),
+        "frame_is_active": bool(_getattr(raw, "frame_is_active", True)),
+        "frame_change_type": _getattr(raw, "frame_change_type", None),
     }
+
+    # комментарии
+    comment_raw = _getattr(raw, "comment_raw", "") or ""
+    comment_human_raw = _getattr(raw, "comment_human", None)
+    comment_admin = _getattr(manual, "comment_admin", None) if manual else None
+
+    if comment_admin:
+        base_human = comment_human_raw or ""
+        human = f"{base_human} Комментарий администратора: {comment_admin}".strip() if base_human else f"Комментарий администратора: {comment_admin}"
+    else:
+        human = comment_human_raw
+
+    properties["comment_raw"] = comment_raw
+    properties["comment_human"] = human
 
     return {
         "type": "Feature",
-        "id": raw.frame_id,
+        "id": _getattr(raw, "frame_id", None),
         "geometry": {"type": "Point", "coordinates": [lon, lat]},
         "properties": properties,
     }
 
 
-def _feature_from_manual_only(manual: FrameManual) -> Optional[dict]:
-    """Рамка созданная только руками админа, без raw."""
-    if manual.lon_override is None or manual.lat_override is None:
-        return None
-
-    time_windows = _parse_json_field(manual.time_windows_override, default=[])
-    tags_admin = _parse_json_field(manual.tags_admin, default=[])
-
-    properties = {
-        "road_id": manual.road_id_override,
-        "road_name": manual.road_name_override,
-        "class": manual.clazz_override,
-        "object_type": "frame",
-        "hgv_access": manual.hgv_access_override,
-        "weight_limit_tons": manual.weight_limit_tons_override,
-        "axle_load_tons": manual.axle_load_tons_override,
-        "time_windows": time_windows,
-        "valid_from": manual.valid_from_override,
-        "valid_to": manual.valid_to_override,
-        "direction": manual.direction_override,
-        "source_type": "manual",
-        "source_name": "manual_admin",
-        "priority": 1,
-        "tags": tags_admin or [],
-        "frame_id": manual.frame_id,
-        "frame_row_id_raw": None,
-        "frame_url": None,
-        "frame_status_raw": None,
-        "frame_error_raw": None,
-        "frame_state": manual.frame_state_override,
-        "frame_first_seen": None,
-        "frame_last_seen": None,
-        "frame_is_active": True,
-        "frame_change_type": "manual_only",
-        "comment_raw": None,
-        "comment_human": (manual.comment_admin.strip() if manual.comment_admin else None),
-    }
-
+def _suggestion_to_dict(s) -> dict:
     return {
-        "type": "Feature",
-        "id": manual.frame_id,
-        "geometry": {"type": "Point", "coordinates": [manual.lon_override, manual.lat_override]},
-        "properties": properties,
+        "id": _getattr(s, "id", None),
+        "frame_id": _getattr(s, "frame_id", None),
+        "type": _getattr(s, "type", None),
+        "suggested_lon": _getattr(s, "suggested_lon", None),
+        "suggested_lat": _getattr(s, "suggested_lat", None),
+        "suggested_weight_limit_tons": _getattr(s, "suggested_weight_limit_tons", None),
+        "suggested_axle_load_tons": _getattr(s, "suggested_axle_load_tons", None),
+        "suggested_direction": _getattr(s, "suggested_direction", None),
+        "suggested_frame_state": _getattr(s, "suggested_frame_state", None),
+        "comment_driver": _getattr(s, "comment_driver", None),
+        "contact_phone": _getattr(s, "contact_phone", None),
+        "contact_name": _getattr(s, "contact_name", None),
+        "status": _getattr(s, "status", None),
+        "resolution_comment": _getattr(s, "resolution_comment", None),
+        "processed_at": _getattr(s, "processed_at", None).isoformat() if _getattr(s, "processed_at", None) else None,
+        "processed_by": _getattr(s, "processed_by", None),
+        "created_at": _getattr(s, "created_at", None).isoformat() if _getattr(s, "created_at", None) else None,
     }
 
 
-def _suggestion_to_dict(s: FrameSuggestion) -> dict:
-    return {
-        "id": s.id,
-        "frame_id": s.frame_id,
-        "type": s.type,
-        "suggested_lon": s.suggested_lon,
-        "suggested_lat": s.suggested_lat,
-        "suggested_weight_limit_tons": s.suggested_weight_limit_tons,
-        "suggested_axle_load_tons": s.suggested_axle_load_tons,
-        "suggested_direction": s.suggested_direction,
-        "suggested_frame_state": s.suggested_frame_state,
-        "comment_driver": s.comment_driver,
-        "contact_phone": s.contact_phone,
-        "contact_name": s.contact_name,
-        "status": s.status,
-        "resolution_comment": s.resolution_comment,
-        "processed_at": iso(s.processed_at),
-        "processed_by": s.processed_by,
-        "created_at": iso(s.created_at),
-    }
-
-
-# ---------- API: merged frames ----------
+# ---------- API: объединённый слой рамок ----------
 
 @app.route("/frames", methods=["GET"])
 def get_frames():
     """
-    GET /api/frames  (если приложение смонтировано под /api)
-    FeatureCollection (raw + manual)
+    GET /api/frames  (или /frames, если проксируешь без префикса)
+    Возвращает FeatureCollection с рамками.
+    На этом шаге: raw-слой точно, manual — если модель есть.
     """
     only_active = request.args.get("only_active", "1") != "0"
 
     db = SessionLocal()
     try:
-        q = db.query(FrameRaw)
-        if only_active:
-            q = q.filter(FrameRaw.frame_is_active == True)  # noqa: E712
-        raws: List[FrameRaw] = q.all()
+        query = db.query(FrameRaw)
+        if only_active and hasattr(FrameRaw, "frame_is_active"):
+            query = query.filter(FrameRaw.frame_is_active == True)  # noqa: E712
 
-        raw_ids = {r.frame_id for r in raws}
+        raws = query.all()
 
-        manuals: List[FrameManual] = db.query(FrameManual).all()
-        manual_by_frame: Dict[str, FrameManual] = {}
-        manual_only_list: List[FrameManual] = []
+        manual_by_frame: Dict[str, object] = {}
+        manual_only_list: List[object] = []
 
-        for m in manuals:
-            # если админ пометил "удалить" — не показываем
-            if m.is_deleted_by_admin:
-                manual_by_frame[m.frame_id] = m
-                continue
-            # ручная рамка без raw
-            if m.manual_only:
-                manual_only_list.append(m)
-            manual_by_frame.setdefault(m.frame_id, m)
+        if FrameManual is not None:
+            manuals = db.query(FrameManual).all()
+            for m in manuals:
+                if _getattr(m, "is_deleted_by_admin", False):
+                    manual_by_frame[_getattr(m, "frame_id")] = m
+                    continue
+                if _getattr(m, "manual_only", False):
+                    manual_only_list.append(m)
+                manual_by_frame.setdefault(_getattr(m, "frame_id"), m)
 
         features: List[dict] = []
 
-        # raw + manual
         for raw in raws:
-            m = manual_by_frame.get(raw.frame_id)
-            if m and m.is_deleted_by_admin:
+            m = manual_by_frame.get(_getattr(raw, "frame_id"))
+            if m and _getattr(m, "is_deleted_by_admin", False):
                 continue
             features.append(_merge_raw_and_manual(raw, m))
 
-        # manual-only
-        for m in manual_only_list:
-            if m.frame_id in raw_ids:
-                continue
-            feat = _feature_from_manual_only(m)
-            if feat:
-                features.append(feat)
-
+        # manual-only добавим позже (когда подтвердим поля/модель)
         return jsonify({"type": "FeatureCollection", "features": features})
     finally:
         db.close()
 
 
-# ---------- API: suggestions ----------
+# ---------- API: предложения от водителей ----------
 
 @app.route("/frames/<frame_id>/suggest", methods=["POST"])
 def suggest_for_existing_frame(frame_id: str):
     data = request.get_json(silent=True) or {}
-    comment = (str(data.get("comment_driver", "")).strip())
-    if len(comment) < 3:
+    comment = data.get("comment_driver")
+    if not comment or len(str(comment).strip()) < 3:
         abort(400, description="comment_driver is required")
 
     db = SessionLocal()
@@ -265,7 +208,7 @@ def suggest_for_existing_frame(frame_id: str):
             contact_phone=data.get("contact_phone"),
             contact_name=data.get("contact_name"),
             status="new",
-            created_at=utc_now(),
+            created_at=datetime.utcnow(),
         )
         db.add(suggestion)
         db.commit()
@@ -278,11 +221,11 @@ def suggest_for_existing_frame(frame_id: str):
 @app.route("/frames/suggest", methods=["POST"])
 def suggest_new_frame():
     data = request.get_json(silent=True) or {}
-    comment = (str(data.get("comment_driver", "")).strip())
-    if len(comment) < 3:
+    comment = data.get("comment_driver")
+    if not comment or len(str(comment).strip()) < 3:
         abort(400, description="comment_driver is required")
 
-    if data.get("suggested_lon") is None or data.get("suggested_lat") is None:
+    if "suggested_lon" not in data or "suggested_lat" not in data:
         abort(400, description="suggested_lon and suggested_lat are required for new_frame")
 
     db = SessionLocal()
@@ -300,7 +243,7 @@ def suggest_new_frame():
             contact_phone=data.get("contact_phone"),
             contact_name=data.get("contact_name"),
             status="new",
-            created_at=utc_now(),
+            created_at=datetime.utcnow(),
         )
         db.add(suggestion)
         db.commit()
@@ -312,14 +255,12 @@ def suggest_new_frame():
 
 @app.route("/frame_suggestions", methods=["GET"])
 def list_suggestions():
-    """
-    GET /api/frame_suggestions?status=new|approved|rejected
-    """
     status = request.args.get("status")
+
     db = SessionLocal()
     try:
         q = db.query(FrameSuggestion)
-        if status:
+        if status and hasattr(FrameSuggestion, "status"):
             q = q.filter(FrameSuggestion.status == status)
         items = q.order_by(FrameSuggestion.created_at.desc()).all()
         return jsonify([_suggestion_to_dict(s) for s in items])
@@ -327,6 +268,5 @@ def list_suggestions():
         db.close()
 
 
-# локально: python app_flask.py
 if __name__ == "__main__":
     app.run(debug=True)
