@@ -1,0 +1,12 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+
+# Runtime artifacts
+api/backend/frames.db
+api/backend/frames.db.txt
+api/backend/out/
