@@ -2,7 +2,7 @@ name: Update frames.db daily
 
 on:
   schedule:
-    - cron: "0 5 * * *"
+    - cron: "0 5 * * *"   # каждый день в 05:00 UTC
   workflow_dispatch: {}
 
 jobs:
@@ -21,7 +21,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install requests beautifulsoup4 sqlalchemy
+          python -m pip install requests beautifulsoup4 sqlalchemy paramiko
 
       - name: Run parser (nerudas.ru)
         working-directory: ./api/backend
@@ -41,6 +41,4 @@ jobs:
           SFTP_PASSWORD: ${{ secrets.SFTP_PASSWORD }}
           SFTP_PORT: ${{ secrets.SFTP_PORT }}
         run: |
-          python -m pip install paramiko
           python upload_sftp.py
-
