@@ -1,0 +1,56 @@
+AddDefaultCharset UTF-8
+
+# Типы файлов
+AddType application/javascript .js
+AddType application/geo+json .geojson
+AddType application/json .json
+AddType image/svg+xml .svg
+
+<IfModule mod_headers.c>
+  # Убираем возможные старые CSP-заголовки
+  Header always unset Content-Security-Policy
+  Header always unset Content-Security-Policy-Report-Only
+
+  # // удалено (ошибка): старая CSP без 'unsafe-inline' для script-src
+  # Header always set Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'self'; form-action 'self'; script-src 'self' https://api-maps.yandex.ru https://yastatic.net https://*.yastatic.net https://core-renderer-tiles.maps.yandex.net; style-src 'self' 'unsafe-inline' https://yastatic.net https://*.yastatic.net blob:; style-src-elem 'self' 'unsafe-inline' https://yastatic.net https://*.yastatic.net blob:; style-src-attr 'unsafe-inline'; img-src 'self' data: https://yastatic.net https://*.yastatic.net https://yandex.ru https://*.yandex.ru https://*.yandex.net; font-src 'self' https://yastatic.net https://*.yastatic.net data:; connect-src 'self' https://api-maps.yandex.ru https://*.yandex.ru https://*.yandex.net https://*.yastatic.net https://core-renderer-tiles.maps.yandex.net; frame-src https://yandex.ru https://api-maps.yandex.ru; worker-src 'self' blob:; manifest-src 'self'; report-uri /map/csp-report.php"
+
+  # CSP, совместимая с Yandex Maps API 2.1 и inline-скриптами карты
+  # ВНИМАНИЕ: одна строка, без переносов внутри кавычек.
+  Header always set Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'self'; form-action 'self'; script-src 'self' 'unsafe-inline' https://api-maps.yandex.ru https://yastatic.net https://*.yastatic.net https://core-renderer-tiles.maps.yandex.net; script-src-elem 'self' 'unsafe-inline' https://api-maps.yandex.ru https://yastatic.net https://*.yastatic.net https://core-renderer-tiles.maps.yandex.net; style-src 'self' 'unsafe-inline' https://yastatic.net https://*.yastatic.net blob:; style-src-elem 'self' 'unsafe-inline' https://yastatic.net https://*.yastatic.net blob:; style-src-attr 'unsafe-inline'; img-src 'self' data: https://yastatic.net https://*.yastatic.net https://yandex.ru https://*.yandex.ru https://*.yandex.net; font-src 'self' https://yastatic.net https://*.yastatic.net data:; connect-src 'self' https://api-maps.yandex.ru https://*.yandex.ru https://*.yandex.net https://*.yastatic.net https://core-renderer-tiles.maps.yandex.net; frame-src https://yandex.ru https://api-maps.yandex.ru; worker-src 'self' blob:; manifest-src 'self'; report-uri /map/csp-report.php"
+
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set Referrer-Policy "strict-origin-when-cross-origin"
+  Header always set Permissions-Policy "geolocation=(self)"
+</IfModule>
+
+# Запрет листинга каталогов
+Options -Indexes
+
+# Кэширование статики
+<IfModule mod_expires.c>
+  ExpiresActive On
+  ExpiresByType text/css "access plus 7 days"
+  ExpiresByType application/javascript "access plus 7 days"
+  ExpiresByType application/json "access plus 1 day"
+  ExpiresByType application/geo+json "access plus 1 day"
+  ExpiresByType image/png "access plus 30 days"
+  ExpiresByType image/jpeg "access plus 30 days"
+  ExpiresByType image/svg+xml "access plus 30 days"
+</IfModule>
+
+# CORS и кеш для geojson/json данных карты
+<IfModule mod_headers.c>
+  <FilesMatch "\.(geojson|json)$">
+    Header set Access-Control-Allow-Origin "*"
+    Header set Cache-Control "no-store, max-age=0"
+  </FilesMatch>
+</IfModule>
+
+# PWA: сервис-воркер в пределах /map/
+<IfModule mod_headers.c>
+  <Files "sw.js">
+    Header set Service-Worker-Allowed "/map/"
+  </Files>
+</IfModule>
+
+DirectoryIndex index.html

@@ -1,0 +1,51 @@
+AddDefaultCharset UTF-8
+Options -Indexes +FollowSymLinks
+
+# ---------------------------------------
+# 🔒 Пропуск существующих файлов/папок
+RewriteEngine On
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule - [L]
+
+# ---------------------------------------
+# 🌐 Канонизация: HTTPS + без www
+RewriteCond %{HTTP_HOST} !^trans-time\.ru$ [OR]
+RewriteCond %{HTTPS} !=on
+RewriteCond %{HTTP:X-Forwarded-Proto} !https
+RewriteRule ^ https://trans-time.ru%{REQUEST_URI} [R=301,L]
+
+# ---------------------------------------
+# 🧠 MIME-типы
+AddType application/json .geojson
+AddType "application/javascript; charset=UTF-8" .js
+AddType "text/css; charset=UTF-8" .css
+AddType "image/svg+xml; charset=UTF-8" .svg
+
+# ---------------------------------------
+# 🛡️ Content Security Policy (CSP)
+# ✅ стабильная, без 500, подходит под Яндекс.Карты
+<IfModule mod_headers.c>
+Header always set Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: https://api-maps.yandex.ru https://yastatic.net https://*.yastatic.net https://*.yandex.net; script-src-elem 'self' 'unsafe-inline' blob: https://api-maps.yandex.ru https://yastatic.net https://*.yastatic.net https://*.yandex.net; connect-src 'self' https://api-maps.yandex.ru https://yastatic.net https://*.yastatic.net https://geocode-maps.yandex.ru https://router-maps.yandex.ru; img-src 'self' data: blob: https://yastatic.net https://*.yastatic.net https://*.yandex.ru https://*.yandex.net https://*.maps.yandex.net https://core-renderer-tiles.maps.yandex.net; style-src 'self' 'unsafe-inline' https://yastatic.net https://*.yastatic.net; font-src 'self' data: https://yastatic.net https://*.yastatic.net; worker-src blob:"
+</IfModule>
+
+# ---------------------------------------
+# 🚫 Отключение кэша (чтобы видеть изменения сразу)
+<IfModule mod_headers.c>
+Header set Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+Header set Pragma "no-cache"
+Header set Expires "0"
+</IfModule>
+
+# ---------------------------------------
+# 🧩 CSP Report — можно включить позже при необходимости
+# ⚠️ пока отключено, чтобы не спамило F12
+# <IfModule mod_headers.c>
+# Header always set Content-Security-Policy-Report-Only "default-src 'self'; report-uri /map/csp-report.php; report-to csp-endpoint"
+# Header always set Report-To "{\"group\":\"csp-endpoint\",\"max_age\":10800,\"endpoints\":[{\"url\":\"/map/csp-report.php\"}]}"
+# </IfModule>
+
+# ---------------------------------------
+# 🧹 Кэш и идентификаторы
+Header unset ETag
+FileETag None

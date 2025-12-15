@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>TransTime — логистика</title>
+
+  <link rel="icon" href="/assets/logotip-tt.png" />
+
+  <!-- Прелоадим только основную карту РФ -->
+  <link rel="preload" href="/assets/bg-map-ru-neurons.png" as="image">
+
+  <link rel="stylesheet" href="/assets/css/landing.css">
+</head>
+<body class="tt-landing">
+
+  <!-- КАРТА В МАСКЕ -->
+  <div class="tt-map">
+    <div class="tt-map-box">
+      <!-- светлая карта России внутри маски -->
+      <div class="tt-map-img" aria-hidden="true"></div>
+
+      <!-- нейронные линии + огоньки -->
+      <canvas id="lines" class="tt-layer" aria-hidden="true"></canvas>
+      <canvas id="fx" class="tt-layer" aria-hidden="true"></canvas>
+    </div>
+  </div>
+
+  <!-- UI -->
+  <main class="tt-shell">
+    <div class="tt-logo">
+      <div class="tt-logo-inner">
+        <img src="/assets/logotip-tt.png" alt="TransTime логотип">
+      </div>
+    </div>
+
+    <h1 class="tt-title">ЛОГИСТИКА</h1>
+
+    <section class="tt-panel">
+      <form id="loginForm" class="tt-form" autocomplete="on">
+        <label class="tt-field">
+          <span class="tt-field-label">Логин</span>
+          <input id="login" type="text" placeholder="Введите логин" autocomplete="username">
+        </label>
+
+        <label class="tt-field">
+          <span class="tt-field-label">Пароль</span>
+          <input id="password" type="password" placeholder="Введите пароль" autocomplete="current-password">
+        </label>
+
+        <button type="submit" class="tt-btn-main">Войти</button>
+      </form>
+
+      <div class="tt-links">
+        <button class="tt-chip" id="demoLink" type="button">Демо-доступ</button>
+        <button class="tt-link-text" type="button" id="registerLink">Зарегистрироваться</button>
+      </div>
+
+      <div id="welcome-msg" class="tt-msg" aria-live="polite"></div>
+    </section>
+
+    <footer class="tt-footer">
+      © TransTime. Цифровая платформа маршрутов, контроля и аналитики грузоперевозок.
+    </footer>
+  </main>
+
+  <script src="/assets/js/neural-bg.js"></script>
+</body>
+</html>
