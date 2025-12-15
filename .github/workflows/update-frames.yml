@@ -42,3 +42,14 @@ jobs:
           SFTP_PORT: ${{ secrets.SFTP_PORT }}
         run: |
           python upload_sftp.py
+
+      - name: Upload API code via SFTP (Reg.ru)
+        working-directory: ./api/backend
+        env:
+          SFTP_HOST: ${{ secrets.SFTP_HOST }}
+          SFTP_USER: ${{ secrets.SFTP_USER }}
+          SFTP_PASSWORD: ${{ secrets.SFTP_PASSWORD }}
+          SFTP_PORT: ${{ secrets.SFTP_PORT }}
+        run: |
+          python upload_api_sftp.py
+
